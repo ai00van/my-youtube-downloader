@@ -108,7 +108,7 @@ def is_youtube_url(url: str) -> bool:
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    html = '''<!DOCTYPE html>
+    html = r'''<!DOCTYPE html>
 <html lang="ko">
 
 <head>
@@ -317,7 +317,7 @@ document.addEventListener(
             }
 
 
-            if (!/^https?:\\/\\//i.test(url)) {
+            if (!/^https?:\/\//i.test(url)) {
 
                 status.className = "error";
 

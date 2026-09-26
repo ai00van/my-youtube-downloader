@@ -6,7 +6,7 @@ import yt_dlp
 import os
 import glob
 
-app = FastAPI(title="유튜브 통합 다운로더 (영상 + 오디오선택)")
+app = FastAPI(title="유튜브 통합 다운로더")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,7 +22,7 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 class DownloadRequest(BaseModel):
     url: str
     mode: str = "video"  # "video" 또는 "audio"
-    audio_codec: str = "mp3" # mp3, wav, flac, m4a, ogg
+    audio_codec: str = "mp3"
 
 HTML_CONTENT = """
 <!DOCTYPE html>
@@ -41,7 +41,7 @@ HTML_CONTENT = """
             </div>
             <div>
                 <h1 class="text-2xl font-black tracking-tight text-white">유튜브 통합 다운로더</h1>
-                <p class="text-xs text-slate-400">영상 다운로드(음원 포함) 또는 음원만 추출을 선택하세요</p>
+                <p class="text-xs text-slate-400">영상 다운로드 또는 음원만 따로 추출 선택 가능</p>
             </div>
         </div>
         
@@ -179,6 +179,12 @@ async def download_media(data: DownloadRequest):
             'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
             'restrictfilenames': True,
             'noplaylist': True,
+            # 봇 차단을 우회하기 위해 안드로이드 플레이어 클라이언트 속성 지정
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android']
+                }
+            }
         }
 
         if data.mode == 'audio':
@@ -224,5 +230,5 @@ async def download_media(data: DownloadRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 유튜브 통합 다운로드 서버가 시작되었습니다! http://127.0.0.1:8000 에 접속하세요.")
+    print("🚀 서버가 시작되었습니다!")
     uvicorn.run(app, host="127.0.0.1", port=8000)

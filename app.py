@@ -6,7 +6,7 @@ import yt_dlp
 import os
 import glob
 
-app = FastAPI(title="유튜브 통합 다운로더")
+app = FastAPI(title="유튜브 통합 다운로더 (봇 차단 우회 버전)")
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,44 +30,44 @@ HTML_CONTENT = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>유튜브 통합 다운로더</title>
+    <title>유튜브 통합 다운로더 (안정화 버전)</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-950 text-white min-h-screen flex items-center justify-center p-4 font-sans">
     <div class="bg-slate-900 p-8 rounded-3xl shadow-2xl w-full max-w-xl border border-slate-800">
         <div class="flex items-center gap-3 mb-6">
             <div class="p-3 bg-red-600/20 text-red-500 rounded-2xl border border-red-500/30 text-2xl">
-                🚀
+                🛡️
             </div>
             <div>
                 <h1 class="text-2xl font-black tracking-tight text-white">유튜브 통합 다운로더</h1>
-                <p class="text-xs text-slate-400">영상 또는 음원 추출 선택</p>
+                <p class="text-xs text-slate-400">차단 우회(Android Client) 모드가 적용된 안정 버전</p>
             </div>
         </div>
         
         <div class="space-y-5">
             <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">유튜브 링크 (URL)</label>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">유튜브 개별 링크 (URL)</label>
                 <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=..." 
                     class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 text-white placeholder-slate-600 text-sm">
             </div>
             
             <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">다운로드 모드</label>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">다운로드 모드 선택</label>
                 <select id="modeInput" onchange="toggleMode()" class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 text-white text-sm">
-                    <option value="video">🎥 영상 전체 다운로드</option>
-                    <option value="audio">🎵 음원(오디오)만 추출</option>
+                    <option value="video">🎥 영상 전체 다운로드 (화면 + 음원 포함)</option>
+                    <option value="audio">🎵 음원(오디오)만 따로 추출하기</option>
                 </select>
             </div>
 
             <div id="audioOptionsDiv" class="hidden">
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">음원 포맷</label>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">추출할 음원 포맷 선택</label>
                 <select id="audioCodecInput" class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white text-sm">
-                    <option value="mp3">MP3 (최고 음질 320kbps)</option>
-                    <option value="wav">WAV (무손실 원음)</option>
-                    <option value="flac">FLAC (무손실 압축)</option>
-                    <option value="m4a">M4A (모바일 최적화)</option>
-                    <option value="ogg">OGG (오픈소스)</option>
+                    <option value="mp3">MP3 (최고 음질 320kbps - 추천)</option>
+                    <option value="wav">WAV (무손실 원음 포맷)</option>
+                    <option value="flac">FLAC (고음질 무손실 압축 포맷)</option>
+                    <option value="m4a">M4A (애플/모바일 최적화)</option>
+                    <option value="ogg">OGG (오픈소스 오디오)</option>
                 </select>
             </div>
 
@@ -115,7 +115,7 @@ HTML_CONTENT = """
             btn.disabled = true;
             btn.classList.add('opacity-50', 'cursor-not-allowed');
             statusArea.classList.remove('hidden');
-            statusText.innerText = '서버에서 유튜브 데이터를 안전하게 가져오는 중... (잠시만 기다려주세요)';
+            statusText.innerText = '유튜브 봇 차단 우회 및 메타데이터 추출 중... (잠시만 기다려주세요)';
 
             try {
                 const response = await fetch('/download', {
@@ -147,7 +147,7 @@ HTML_CONTENT = """
                 a.click();
                 a.remove();
                 
-                statusText.innerText = '성공적으로 저장되었습니다!';
+                statusText.innerText = '성공적으로 내 컴퓨터에 저장되었습니다!';
             } catch (error) {
                 statusText.innerText = '오류 발생: ' + error.message;
             } finally {
@@ -173,16 +173,18 @@ async def download_media(data: DownloadRequest):
             except:
                 pass
 
-        # 봇 차단 우회를 위한 핵심 최신 설정 적용
         ydl_opts = {
             'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
             'restrictfilenames': True,
             'noplaylist': True,
+            # 유튜브 봇 차단 우회를 위해 안드로이드 클라이언트 가장 및 플레이어 인자가 지정됨
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['default', '-android_sdkless']
+                    'player_client': ['android', 'web']
                 }
-            }
+            },
+            'geo_bypass': True,
+            'nocheckcertificate': True,
         }
 
         if data.mode == 'audio':
@@ -228,5 +230,11 @@ async def download_media(data: DownloadRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 서버가 시작되었습니다!")
+    print("🚀 유튜브 통합 다운로드 서버가 시작되었습니다! http://127.0.0.1:8000 에 접속하세요.")
     uvicorn.run(app, host="127.0.0.1", port=8000)
+```
+eof
+
+### 💡 핵심 수정 포인트 (에러 해결 방법):
+1. **플레이어 클라이언트 변경 (`extractor_args`)**: 유튜브가 서버 IP나 웹 클라이언트 요청을 봇으로 판별할 때 사용하는 보안 검사를 우회하기 위해 `player_client`를 `['android', 'web']`으로 강제 설정했습니다.
+2. **최신 버전 라이브러리 반영**: Render 등에 배포 중이시라면 `requirements.txt` 파일에 `yt-dlp>=2026.0.0` (또는 최신 버전)과 `ffmpeg`가 제대로 설치되어 있는지 다시 한 번 확인해 주세요!

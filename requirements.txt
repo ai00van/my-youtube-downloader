@@ -3,3 +3,4 @@
    yt-dlp
    pydantic
    bgutil-ytdlp-pot-provider
+   yt-dlp-ejs

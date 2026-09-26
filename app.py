@@ -8,7 +8,7 @@ app = FastAPI()
 
 LOCAL_SERVER = os.environ.get(
     "LOCAL_SERVER",
-    "https://savannah-incident-marshall-models.trycloudflare.com"
+    "https://sellers-warner-executed-trainers.trycloudflare.com"
 )
 
 

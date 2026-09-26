@@ -1,16 +1,12 @@
-import glob
-import os
 import shutil
 import uuid
 from pathlib import Path
 
+import yt_dlp
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
-from starlette.background import BackgroundTask
-
-import yt_dlp
 
 
 app = FastAPI(title="YouTube 통합 다운로드 서버")
@@ -23,7 +19,7 @@ DOWNLOAD_ROOT.mkdir(parents=True, exist_ok=True)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -31,358 +27,238 @@ app.add_middleware(
 
 class DownloadRequest(BaseModel):
     url: str = Field(..., min_length=1)
-    mode: str = "video"
-    audio_format: str = "mp3"
+    format: str = Field(default="video")
 
 
-HTML = r"""<!doctype html>
+def cleanup_directory(directory: Path) -> None:
+    if not directory.exists():
+        return
+
+    try:
+        shutil.rmtree(directory, ignore_errors=True)
+    except Exception:
+        pass
+
+
+def find_downloaded_file(directory: Path) -> Path | None:
+    if not directory.exists():
+        return None
+
+    files = []
+
+    for pattern in (
+        "*.mp4",
+        "*.webm",
+        "*.mkv",
+        "*.mp3",
+        "*.m4a",
+        "*.opus",
+    ):
+        files.extend(directory.glob(pattern))
+
+    if not files:
+        return None
+
+    files.sort(
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
+
+    return files[0]
+
+
+@app.get("/", response_class=HTMLResponse)
+async def home():
+    return """
+<!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-<title>YouTube 다운로드</title>
+    <title>YouTube 다운로드</title>
 
-<style>
-* {
-    box-sizing: border-box;
-}
+    <style>
+        * {
+            box-sizing: border-box;
+        }
 
-body {
-    margin: 0;
-    font-family: Arial, sans-serif;
-    background: #f5f5f5;
-    color: #222;
-}
+        body {
+            margin: 0;
+            padding: 30px 15px;
+            background: #f5f5f5;
+            font-family: Arial, sans-serif;
+        }
 
-.wrap {
-    max-width: 720px;
-    margin: 50px auto;
-    padding: 24px;
-}
+        .container {
+            width: 100%;
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 30px;
+            background: #ffffff;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+        }
 
-.card {
-    background: #fff;
-    border-radius: 16px;
-    padding: 28px;
-    box-shadow: 0 5px 24px rgba(0, 0, 0, .08);
-}
+        h1 {
+            margin: 0 0 25px;
+            text-align: center;
+        }
 
-h1 {
-    margin-top: 0;
-}
+        input,
+        select,
+        button {
+            width: 100%;
+            padding: 14px;
+            margin-top: 12px;
+            border-radius: 8px;
+            border: 1px solid #cccccc;
+            font-size: 16px;
+        }
 
-input,
-select,
-button {
-    width: 100%;
-    padding: 13px;
-    margin-top: 8px;
-    border: 1px solid #ccc;
-    border-radius: 9px;
-    font-size: 15px;
-}
+        button {
+            border: none;
+            background: #111111;
+            color: #ffffff;
+            cursor: pointer;
+        }
 
-button {
-    border: 0;
-    background: #111;
-    color: #fff;
-    cursor: pointer;
-    font-weight: 700;
-}
+        button:hover {
+            background: #333333;
+        }
 
-button:disabled {
-    opacity: .5;
-    cursor: not-allowed;
-}
+        button:disabled {
+            background: #999999;
+            cursor: not-allowed;
+        }
 
-.row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-}
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f1f1f1;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
 
-.status {
-    margin-top: 18px;
-    padding: 14px;
-    border-radius: 9px;
-    background: #f0f0f0;
-    white-space: pre-wrap;
-}
-
-.hidden {
-    display: none;
-}
-
-.small {
-    font-size: 13px;
-    color: #666;
-}
-
-@media (max-width: 600px) {
-    .row {
-        grid-template-columns: 1fr;
-    }
-
-    .wrap {
-        margin: 15px auto;
-        padding: 12px;
-    }
-}
-</style>
+        .download-link {
+            display: block;
+            margin-top: 15px;
+            padding: 14px;
+            text-align: center;
+            background: #198754;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 8px;
+        }
+    </style>
 </head>
 
 <body>
 
-<div class="wrap">
-    <div class="card">
+<div class="container">
 
-        <h1>YouTube 다운로드</h1>
+    <h1>YouTube 다운로드</h1>
 
-        <p class="small">
-            공개적으로 접근 가능한 영상 다운로드용 서버
-        </p>
+    <input
+        id="url"
+        type="url"
+        placeholder="YouTube 영상 주소를 입력하세요"
+    >
 
-        <label for="url">YouTube URL</label>
+    <select id="format">
+        <option value="video">영상 + 음성</option>
+        <option value="audio">음성만</option>
+    </select>
 
-        <input
-            id="url"
-            type="url"
-            placeholder="https://www.youtube.com/watch?v=..."
-            autocomplete="off"
-        >
+    <button
+        id="downloadButton"
+        onclick="downloadVideo()"
+    >
+        다운로드
+    </button>
 
-        <div class="row">
-
-            <div>
-                <label for="mode">형식</label>
-
-                <select id="mode" onchange="toggleAudio()">
-                    <option value="video">영상 MP4</option>
-                    <option value="audio">오디오</option>
-                </select>
-            </div>
-
-            <div id="audioBox" class="hidden">
-
-                <label for="audioFormat">오디오 형식</label>
-
-                <select id="audioFormat">
-                    <option value="mp3">MP3</option>
-                    <option value="m4a">M4A</option>
-                    <option value="wav">WAV</option>
-                    <option value="flac">FLAC</option>
-                    <option value="ogg">OGG</option>
-                </select>
-
-            </div>
-
-        </div>
-
-        <button
-            id="downloadButton"
-            onclick="downloadVideo()"
-        >
-            다운로드
-        </button>
-
-        <div
-            id="status"
-            class="status hidden"
-        ></div>
-
+    <div id="status">
+        대기 중
     </div>
+
 </div>
 
-
 <script>
-
-function toggleAudio() {
-
-    const mode =
-        document.getElementById("mode").value;
-
-    const audioBox =
-        document.getElementById("audioBox");
-
-    audioBox.classList.toggle(
-        "hidden",
-        mode !== "audio"
-    );
-}
-
-
-function setStatus(message) {
-
-    const box =
-        document.getElementById("status");
-
-    box.textContent = message;
-
-    box.classList.remove("hidden");
-}
-
-
 async function downloadVideo() {
+    const urlElement = document.getElementById("url");
+    const formatElement = document.getElementById("format");
+    const button = document.getElementById("downloadButton");
+    const status = document.getElementById("status");
 
-    const url =
-        document.getElementById("url").value.trim();
-
-    const mode =
-        document.getElementById("mode").value;
-
-    const audioFormat =
-        document.getElementById("audioFormat").value;
-
-    const button =
-        document.getElementById("downloadButton");
-
+    const url = urlElement.value.trim();
+    const format = formatElement.value;
 
     if (!url) {
-
-        setStatus(
-            "YouTube URL을 입력해주세요."
-        );
-
+        status.textContent =
+            "YouTube 주소를 입력해주세요.";
         return;
     }
 
-
     button.disabled = true;
-
-    setStatus(
-        "다운로드를 준비하는 중입니다.\n잠시 기다려주세요..."
-    );
-
+    status.textContent =
+        "다운로드를 준비하고 있습니다...";
 
     try {
+        const response = await fetch(
+            "/api/download",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    url: url,
+                    format: format
+                })
+            }
+        );
 
-        const response =
-            await fetch(
-                "/download",
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-                        url: url,
-                        mode: mode,
-                        audio_format: audioFormat
-                    })
-                }
-            );
-
+        const data = await response.json();
 
         if (!response.ok) {
-
-            let message =
-                "다운로드에 실패했습니다.";
-
-
-            try {
-
-                const data =
-                    await response.json();
-
-                if (data.detail) {
-                    message = data.detail;
-                }
-
-            } catch (error) {
-                // JSON 응답이 아닌 경우 기본 메시지 사용
-            }
-
-
-            throw new Error(message);
-        }
-
-
-        const blob =
-            await response.blob();
-
-
-        const disposition =
-            response.headers.get(
-                "Content-Disposition"
-            ) || "";
-
-
-        let filename =
-            mode === "video"
-                ? "video.mp4"
-                : "audio." + audioFormat;
-
-
-        const utf8Match =
-            disposition.match(
-                /filename\*=UTF-8''([^;]+)/i
+            throw new Error(
+                data.detail ||
+                "다운로드에 실패했습니다."
             );
-
-
-        if (utf8Match) {
-
-            try {
-
-                filename =
-                    decodeURIComponent(
-                        utf8Match[1]
-                    );
-
-            } catch (error) {
-                // 기본 파일명 유지
-            }
-
         }
 
+        status.textContent =
+            data.message ||
+            "다운로드가 완료되었습니다.";
 
-        const objectUrl =
-            URL.createObjectURL(blob);
+        if (data.download_url) {
+            const link = document.createElement("a");
 
+            link.href = data.download_url;
+            link.textContent =
+                "파일 다운로드";
 
-        const anchor =
-            document.createElement("a");
+            link.className =
+                "download-link";
 
+            link.download = "";
 
-        anchor.href = objectUrl;
-        anchor.download = filename;
-
-        document.body.appendChild(anchor);
-
-        anchor.click();
-
-        anchor.remove();
-
-
-        setTimeout(
-            () => URL.revokeObjectURL(objectUrl),
-            1000
-        );
-
-
-        setStatus(
-            "다운로드가 완료되었습니다."
-        );
+            status.appendChild(link);
+        }
 
     } catch (error) {
-
-        setStatus(
-            error.message ||
-            "다운로드 중 오류가 발생했습니다."
-        );
+        status.textContent =
+            "다운로드 오류가 발생했습니다.\\n\\n" +
+            (error.message || error);
 
     } finally {
-
         button.disabled = false;
     }
 }
-
-
-toggleAudio();
-
 </script>
 
 </body>
@@ -390,346 +266,183 @@ toggleAudio();
 """
 
 
-def cleanup_job(job_dir: Path) -> None:
-    shutil.rmtree(
-        job_dir,
-        ignore_errors=True
-    )
-
-
-def find_downloaded_file(
-    job_dir: Path,
-) -> Path | None:
-
-    files = [
-        Path(path)
-        for path in glob.glob(
-            str(job_dir / "*")
-        )
-        if Path(path).is_file()
-        and not Path(path).name.endswith(
-            (
-                ".part",
-                ".ytdl",
-                ".temp",
-            )
-        )
-    ]
-
-
-    if not files:
-        return None
-
-
-    files.sort(
-        key=lambda item: item.stat().st_mtime,
-        reverse=True,
-    )
-
-
-    return files[0]
-
-
-def safe_error_message(
-    error: Exception,
-) -> str:
-
-    message = str(error)
-
-
-    if (
-        "Sign in to confirm you’re not a bot"
-        in message
-        or
-        "Sign in to confirm you're not a bot"
-        in message
-    ):
-
-        return (
-            "YouTube가 현재 서버 요청을 봇으로 판단하여 "
-            "다운로드를 차단했습니다. "
-            "잠시 후 다시 시도하거나 다른 영상으로 "
-            "테스트해주세요."
-        )
-
-
-    if (
-        "PO Token" in message
-        or
-        "POT" in message
-        or
-        "pot" in message.lower()
-    ):
-
-        return (
-            "YouTube 인증 토큰 처리에 실패했습니다. "
-            "잠시 후 다시 시도하거나 다른 영상으로 "
-            "테스트해주세요."
-        )
-
-
-    if (
-        "Requested format is not available"
-        in message
-    ):
-
-        return (
-            "요청한 영상 형식을 사용할 수 없습니다. "
-            "다른 영상으로 테스트해주세요."
-        )
-
-
-    if (
-        "ffmpeg" in message.lower()
-        and
-        (
-            "not found" in message.lower()
-            or
-            "missing" in message.lower()
-        )
-    ):
-
-        return (
-            "서버의 FFmpeg 처리에 문제가 발생했습니다."
-        )
-
-
-    return (
-        "다운로드 중 오류가 발생했습니다."
-    )
-
-
-@app.get(
-    "/",
-    response_class=HTMLResponse,
-)
-async def index() -> str:
-
-    return HTML
-
-
 @app.get("/health")
-async def health() -> dict:
-
+async def health():
     return {
-        "status": "ok"
+        "status": "ok",
+        "yt_dlp": yt_dlp.version.__version__,
+        "bgutil": "configured",
     }
 
 
-@app.post("/download")
-async def download(
+@app.post("/api/download")
+async def download_video(
     request: DownloadRequest,
 ):
-
     url = request.url.strip()
 
-    mode = request.mode.strip().lower()
-
-    audio_format = (
-        request.audio_format
-        .strip()
-        .lower()
-    )
-
-
-    valid_youtube_urls = (
-        "https://www.youtube.com/",
-        "https://youtube.com/",
-        "https://m.youtube.com/",
-        "https://youtu.be/",
-    )
-
-
-    if not url.startswith(
-        valid_youtube_urls
-    ):
-
+    if not url:
         raise HTTPException(
             status_code=400,
-            detail="YouTube URL만 입력해주세요.",
+            detail="YouTube 주소를 입력해주세요.",
         )
 
+    if not (
+        url.startswith("http://")
+        or url.startswith("https://")
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="올바른 URL을 입력해주세요.",
+        )
 
-    if mode not in {
+    if request.format not in (
         "video",
         "audio",
-    }:
-
+    ):
         raise HTTPException(
             status_code=400,
             detail="지원하지 않는 다운로드 형식입니다.",
         )
 
-
-    if audio_format not in {
-        "mp3",
-        "m4a",
-        "wav",
-        "flac",
-        "ogg",
-    }:
-
-        raise HTTPException(
-            status_code=400,
-            detail="지원하지 않는 오디오 형식입니다.",
-        )
-
-
     job_id = uuid.uuid4().hex
-
-    job_dir = (
-        DOWNLOAD_ROOT / job_id
-    )
-
+    job_dir = DOWNLOAD_ROOT / job_id
 
     job_dir.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-
     output_template = str(
-        job_dir
-        / "%(title).150B [%(id)s].%(ext)s"
+        job_dir / "%(title)s.%(ext)s"
     )
 
+    if request.format == "audio":
+        ydl_format = "bestaudio/best"
 
-    common_options = {
+        postprocessors = [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            }
+        ]
+
+    else:
+        ydl_format = (
+            "bv*+ba/"
+            "best"
+        )
+
+        postprocessors = []
+
+    ydl_opts = {
+        "format": ydl_format,
 
         "outtmpl": output_template,
 
+        "merge_output_format": "mp4",
+
         "noplaylist": True,
 
-        "quiet": True,
+        "quiet": False,
 
-        "no_warnings": True,
+        "no_warnings": False,
 
         "retries": 3,
 
         "fragment_retries": 3,
 
-        "concurrent_fragment_downloads": 4,
+        "continuedl": True,
 
-        "socket_timeout": 30,
+        "concurrent_fragment_downloads": 1,
 
-        "windowsfilenames": True,
-
-        "js_runtimes": {
-            "node": {},
-        },
+        "postprocessors": postprocessors,
 
         "extractor_args": {
             "youtubepot-bgutilhttp": {
-                "base_url": "http://127.0.0.1:4416",
-            },
+                "base_url": [
+                    "http://127.0.0.1:4416"
+                ]
+            }
+        },
+
+        "js_runtimes": {
+            "node": {}
         },
     }
 
-
-    if mode == "video":
-
-        ydl_opts = {
-            **common_options,
-
-            "format": "bv*+ba/b",
-
-            "merge_output_format": "mp4",
-        }
-
-    else:
-
-        ydl_opts = {
-            **common_options,
-
-            "format": "bestaudio/best",
-
-            "postprocessors": [
-                {
-                    "key": "FFmpegExtractAudio",
-
-                    "preferredcodec": audio_format,
-
-                    "preferredquality": "192",
-                }
-            ],
-        }
-
-
     try:
-
-        with yt_dlp.YoutubeDL(
-            ydl_opts
-        ) as ydl:
-
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
 
-
-        downloaded = find_downloaded_file(
+        downloaded_file = find_downloaded_file(
             job_dir
         )
 
-
-        if downloaded is None:
-
+        if downloaded_file is None:
             raise RuntimeError(
                 "다운로드된 파일을 찾을 수 없습니다."
             )
 
-
-        response = FileResponse(
-            path=str(downloaded),
-
-            media_type=(
-                "video/mp4"
-                if mode == "video"
-                else "audio/"
-                + audio_format
+        return {
+            "success": True,
+            "message": "다운로드가 완료되었습니다.",
+            "filename": downloaded_file.name,
+            "download_url": (
+                "/api/file/"
+                f"{job_id}/"
+                f"{downloaded_file.name}"
             ),
+        }
 
-            filename=downloaded.name,
-
-            background=BackgroundTask(
-                cleanup_job,
-                job_dir,
-            ),
-        )
-
-
-        return response
-
-
-    except HTTPException:
-
-        cleanup_job(job_dir)
-
-        raise
-
-
-    except Exception as exc:
-
-        cleanup_job(job_dir)
+    except yt_dlp.utils.DownloadError as exc:
+        cleanup_directory(job_dir)
 
         raise HTTPException(
             status_code=500,
-            detail=safe_error_message(exc),
+            detail=(
+                "YouTube 다운로드에 실패했습니다. "
+                "서버 로그를 확인해주세요."
+            ),
+        ) from exc
+
+    except Exception as exc:
+        cleanup_directory(job_dir)
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"다운로드 오류: {str(exc)}",
         ) from exc
 
 
-if __name__ == "__main__":
+@app.get("/api/file/{job_id}/{filename:path}")
+async def download_file(
+    job_id: str,
+    filename: str,
+):
+    safe_job_id = Path(job_id).name
+    safe_filename = Path(filename).name
 
-    import uvicorn
-
-
-    port = int(
-        os.environ.get(
-            "PORT",
-            "10000",
-        )
+    file_path = (
+        DOWNLOAD_ROOT
+        / safe_job_id
+        / safe_filename
     )
 
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="파일을 찾을 수 없습니다.",
+        )
 
-    uvicorn.run(
-        "app:app",
-        host="0.0.0.0",
-        port=port,
+    if not file_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="파일을 찾을 수 없습니다.",
+        )
+
+    return FileResponse(
+        path=str(file_path),
+        filename=file_path.name,
     )

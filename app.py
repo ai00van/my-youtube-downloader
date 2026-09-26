@@ -74,10 +74,11 @@ def is_youtube_url(url: str) -> bool:
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    html = r'''<!DOCTYPE html>
+    html = '''<!DOCTYPE html>
 <html lang="ko">
 
 <head>
+
 <meta charset="UTF-8">
 
 <meta
@@ -120,7 +121,7 @@ body {
     max-width: 700px;
     margin: 0 auto;
     padding: 30px;
-    background: #ffffff;
+    background: #fff;
     border-radius: 15px;
     box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
 }
@@ -137,19 +138,19 @@ button {
     padding: 14px;
     margin-top: 12px;
     border-radius: 8px;
-    border: 1px solid #cccccc;
+    border: 1px solid #ccc;
     font-size: 16px;
 }
 
 button {
     border: none;
-    background: #111111;
-    color: #ffffff;
+    background: #111;
+    color: #fff;
     cursor: pointer;
 }
 
 button:disabled {
-    background: #999999;
+    background: #999;
     cursor: not-allowed;
 }
 
@@ -169,7 +170,7 @@ button:disabled {
     padding: 14px;
     text-align: center;
     background: #198754;
-    color: #ffffff;
+    color: #fff;
     text-decoration: none;
     border-radius: 8px;
     font-weight: bold;
@@ -203,11 +204,11 @@ button:disabled {
 <select id="format">
 
 <option value="video">
-    영상 + 음성
+영상 + 음성
 </option>
 
 <option value="audio">
-    음성만
+음성만
 </option>
 
 </select>
@@ -225,11 +226,9 @@ button:disabled {
 
 </div>
 
-
 <script>
 
 "use strict";
-
 
 document.addEventListener(
     "DOMContentLoaded",
@@ -284,7 +283,7 @@ document.addEventListener(
             }
 
 
-            if (!/^https?:\/\//i.test(url)) {
+            if (!/^https?:\\/\\//i.test(url)) {
 
                 status.className = "error";
 
@@ -478,10 +477,9 @@ document.addEventListener(
 
 </html>'''
 
-
-    response =
-        HTMLResponse(content=html)
-
+    response = HTMLResponse(
+        content=html
+    )
 
     response.headers["Cache-Control"] = (
         "no-cache, no-store, must-revalidate"
@@ -490,7 +488,6 @@ document.addEventListener(
     response.headers["Pragma"] = "no-cache"
 
     response.headers["Expires"] = "0"
-
 
     return response
 
@@ -551,29 +548,23 @@ async def download_video(
         )
 
 
-    job_id =
-        uuid.uuid4().hex
+    job_id = uuid.uuid4().hex
 
-    job_dir =
-        DOWNLOAD_ROOT / job_id
+    job_dir = DOWNLOAD_ROOT / job_id
 
     job_dir.mkdir(
         parents=True,
         exist_ok=True
     )
 
-
-    output_template =
-        str(
-            job_dir /
-            "%(title)s.%(ext)s"
-        )
+    output_template = str(
+        job_dir / "%(title)s.%(ext)s"
+    )
 
 
     if request.format == "audio":
 
-        ydl_format =
-            "bestaudio/best"
+        ydl_format = "bestaudio/best"
 
         postprocessors = [
             {
@@ -590,8 +581,7 @@ async def download_video(
 
     else:
 
-        ydl_format =
-            "bv*+ba/best"
+        ydl_format = "bv*+ba/best"
 
         postprocessors = []
 
@@ -673,10 +663,9 @@ async def download_video(
             ydl.download([url])
 
 
-        downloaded_file =
-            find_downloaded_file(
-                job_dir
-            )
+        downloaded_file = find_downloaded_file(
+            job_dir
+        )
 
 
         if downloaded_file is None:
@@ -686,17 +675,14 @@ async def download_video(
             )
 
 
-        encoded_filename =
-            quote(
-                downloaded_file.name,
-                safe=""
-            )
+        encoded_filename = quote(
+            downloaded_file.name,
+            safe=""
+        )
 
 
         return {
-
-            "success":
-                True,
+            "success": True,
 
             "message":
                 "다운로드가 완료되었습니다.",
@@ -760,15 +746,15 @@ async def download_file(
     filename: str
 ):
 
-    safe_job_id =
-        Path(job_id).name
+    safe_job_id = Path(job_id).name
 
-    safe_filename =
-        Path(filename).name
+    safe_filename = Path(filename).name
 
-
-    file_path =
-        DOWNLOAD_ROOT / safe_job_id / safe_filename
+    file_path = (
+        DOWNLOAD_ROOT
+        / safe_job_id
+        / safe_filename
+    )
 
 
     if (

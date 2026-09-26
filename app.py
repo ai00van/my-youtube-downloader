@@ -8,10 +8,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
+
 import yt_dlp
 
 
 app = FastAPI(title="YouTube 통합 다운로드 서버")
+
 
 DOWNLOAD_ROOT = Path("/app/downloads")
 DOWNLOAD_ROOT.mkdir(parents=True, exist_ok=True)
@@ -37,6 +40,7 @@ HTML = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+
 <title>YouTube 다운로드</title>
 
 <style>
@@ -139,7 +143,7 @@ button:disabled {
             공개적으로 접근 가능한 영상 다운로드용 서버
         </p>
 
-        <label>YouTube URL</label>
+        <label for="url">YouTube URL</label>
 
         <input
             id="url"
@@ -151,7 +155,7 @@ button:disabled {
         <div class="row">
 
             <div>
-                <label>형식</label>
+                <label for="mode">형식</label>
 
                 <select id="mode" onchange="toggleAudio()">
                     <option value="video">영상 MP4</option>
@@ -160,7 +164,8 @@ button:disabled {
             </div>
 
             <div id="audioBox" class="hidden">
-                <label>오디오 형식</label>
+
+                <label for="audioFormat">오디오 형식</label>
 
                 <select id="audioFormat">
                     <option value="mp3">MP3</option>
@@ -169,15 +174,22 @@ button:disabled {
                     <option value="flac">FLAC</option>
                     <option value="ogg">OGG</option>
                 </select>
+
             </div>
 
         </div>
 
-        <button id="downloadButton" onclick="downloadVideo()">
+        <button
+            id="downloadButton"
+            onclick="downloadVideo()"
+        >
             다운로드
         </button>
 
-        <div id="status" class="status hidden"></div>
+        <div
+            id="status"
+            class="status hidden"
+        ></div>
 
     </div>
 </div>
@@ -186,19 +198,27 @@ button:disabled {
 <script>
 
 function toggleAudio() {
-    const mode = document.getElementById("mode").value;
 
-    document
-        .getElementById("audioBox")
-        .classList
-        .toggle("hidden", mode !== "audio");
+    const mode =
+        document.getElementById("mode").value;
+
+    const audioBox =
+        document.getElementById("audioBox");
+
+    audioBox.classList.toggle(
+        "hidden",
+        mode !== "audio"
+    );
 }
 
 
 function setStatus(message) {
-    const box = document.getElementById("status");
+
+    const box =
+        document.getElementById("status");
 
     box.textContent = message;
+
     box.classList.remove("hidden");
 }
 
@@ -219,7 +239,11 @@ async function downloadVideo() {
 
 
     if (!url) {
-        setStatus("YouTube URL을 입력해주세요.");
+
+        setStatus(
+            "YouTube URL을 입력해주세요."
+        );
+
         return;
     }
 
@@ -227,31 +251,37 @@ async function downloadVideo() {
     button.disabled = true;
 
     setStatus(
-        "다운로드를 준비하는 중입니다. 잠시 기다려주세요..."
+        "다운로드를 준비하는 중입니다.\n잠시 기다려주세요..."
     );
 
 
     try {
 
-        const response = await fetch("/download", {
-            method: "POST",
+        const response =
+            await fetch(
+                "/download",
+                {
+                    method: "POST",
 
-            headers: {
-                "Content-Type": "application/json"
-            },
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
 
-            body: JSON.stringify({
-                url: url,
-                mode: mode,
-                audio_format: audioFormat
-            })
-        });
+                    body: JSON.stringify({
+                        url: url,
+                        mode: mode,
+                        audio_format: audioFormat
+                    })
+                }
+            );
 
 
         if (!response.ok) {
 
             let message =
                 "다운로드에 실패했습니다.";
+
 
             try {
 
@@ -262,8 +292,10 @@ async function downloadVideo() {
                     message = data.detail;
                 }
 
-            } catch (e) {
+            } catch (error) {
+                // JSON 응답이 아닌 경우 기본 메시지 사용
             }
+
 
             throw new Error(message);
         }
@@ -274,7 +306,9 @@ async function downloadVideo() {
 
 
         const disposition =
-            response.headers.get("Content-Disposition") || "";
+            response.headers.get(
+                "Content-Disposition"
+            ) || "";
 
 
         let filename =
@@ -283,18 +317,23 @@ async function downloadVideo() {
                 : "audio." + audioFormat;
 
 
-        const match =
+        const utf8Match =
             disposition.match(
                 /filename\*=UTF-8''([^;]+)/i
             );
 
 
-        if (match) {
+        if (utf8Match) {
 
             try {
+
                 filename =
-                    decodeURIComponent(match[1]);
-            } catch (e) {
+                    decodeURIComponent(
+                        utf8Match[1]
+                    );
+
+            } catch (error) {
+                // 기본 파일명 유지
             }
 
         }
@@ -304,20 +343,24 @@ async function downloadVideo() {
             URL.createObjectURL(blob);
 
 
-        const a =
+        const anchor =
             document.createElement("a");
 
 
-        a.href = objectUrl;
-        a.download = filename;
+        anchor.href = objectUrl;
+        anchor.download = filename;
 
-        document.body.appendChild(a);
+        document.body.appendChild(anchor);
 
-        a.click();
+        anchor.click();
 
-        a.remove();
+        anchor.remove();
 
-        URL.revokeObjectURL(objectUrl);
+
+        setTimeout(
+            () => URL.revokeObjectURL(objectUrl),
+            1000
+        );
 
 
         setStatus(
@@ -348,81 +391,135 @@ toggleAudio();
 
 
 def cleanup_job(job_dir: Path) -> None:
-    shutil.rmtree(job_dir, ignore_errors=True)
+    shutil.rmtree(
+        job_dir,
+        ignore_errors=True
+    )
 
 
-def find_downloaded_file(job_dir: Path) -> Path | None:
+def find_downloaded_file(
+    job_dir: Path,
+) -> Path | None:
 
     files = [
         Path(path)
-        for path in glob.glob(str(job_dir / "*"))
+        for path in glob.glob(
+            str(job_dir / "*")
+        )
         if Path(path).is_file()
         and not Path(path).name.endswith(
-            (".part", ".ytdl", ".temp")
+            (
+                ".part",
+                ".ytdl",
+                ".temp",
+            )
         )
     ]
+
 
     if not files:
         return None
 
+
     files.sort(
         key=lambda item: item.stat().st_mtime,
-        reverse=True
+        reverse=True,
     )
+
 
     return files[0]
 
 
-def safe_error_message(error: Exception) -> str:
+def safe_error_message(
+    error: Exception,
+) -> str:
 
     message = str(error)
 
 
     if (
-        "Sign in to confirm you’re not a bot" in message
+        "Sign in to confirm you’re not a bot"
+        in message
         or
-        "Sign in to confirm you're not a bot" in message
+        "Sign in to confirm you're not a bot"
+        in message
     ):
+
         return (
             "YouTube가 현재 서버 요청을 봇으로 판단하여 "
             "다운로드를 차단했습니다. "
-            "잠시 후 다시 시도하거나 다른 영상으로 테스트해주세요."
+            "잠시 후 다시 시도하거나 다른 영상으로 "
+            "테스트해주세요."
         )
 
 
     if (
         "PO Token" in message
         or
+        "POT" in message
+        or
         "pot" in message.lower()
     ):
+
         return (
             "YouTube 인증 토큰 처리에 실패했습니다. "
-            "잠시 후 다시 시도하거나 다른 영상으로 테스트해주세요."
+            "잠시 후 다시 시도하거나 다른 영상으로 "
+            "테스트해주세요."
         )
 
 
-    if "Requested format is not available" in message:
+    if (
+        "Requested format is not available"
+        in message
+    ):
+
         return (
             "요청한 영상 형식을 사용할 수 없습니다. "
             "다른 영상으로 테스트해주세요."
         )
 
 
-    return "다운로드 중 오류가 발생했습니다."
+    if (
+        "ffmpeg" in message.lower()
+        and
+        (
+            "not found" in message.lower()
+            or
+            "missing" in message.lower()
+        )
+    ):
+
+        return (
+            "서버의 FFmpeg 처리에 문제가 발생했습니다."
+        )
 
 
-@app.get("/", response_class=HTMLResponse)
+    return (
+        "다운로드 중 오류가 발생했습니다."
+    )
+
+
+@app.get(
+    "/",
+    response_class=HTMLResponse,
+)
 async def index() -> str:
+
     return HTML
 
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok"}
+
+    return {
+        "status": "ok"
+    }
 
 
 @app.post("/download")
-async def download(request: DownloadRequest):
+async def download(
+    request: DownloadRequest,
+):
 
     url = request.url.strip()
 
@@ -435,22 +532,32 @@ async def download(request: DownloadRequest):
     )
 
 
-    if not (
-        url.startswith("https://www.youtube.com/")
-        or url.startswith("https://youtube.com/")
-        or url.startswith("https://m.youtube.com/")
-        or url.startswith("https://youtu.be/")
+    valid_youtube_urls = (
+        "https://www.youtube.com/",
+        "https://youtube.com/",
+        "https://m.youtube.com/",
+        "https://youtu.be/",
+    )
+
+
+    if not url.startswith(
+        valid_youtube_urls
     ):
+
         raise HTTPException(
             status_code=400,
-            detail="YouTube URL만 입력해주세요."
+            detail="YouTube URL만 입력해주세요.",
         )
 
 
-    if mode not in {"video", "audio"}:
+    if mode not in {
+        "video",
+        "audio",
+    }:
+
         raise HTTPException(
             status_code=400,
-            detail="지원하지 않는 다운로드 형식입니다."
+            detail="지원하지 않는 다운로드 형식입니다.",
         )
 
 
@@ -459,31 +566,35 @@ async def download(request: DownloadRequest):
         "m4a",
         "wav",
         "flac",
-        "ogg"
+        "ogg",
     }:
+
         raise HTTPException(
             status_code=400,
-            detail="지원하지 않는 오디오 형식입니다."
+            detail="지원하지 않는 오디오 형식입니다.",
         )
 
 
     job_id = uuid.uuid4().hex
 
-    job_dir = DOWNLOAD_ROOT / job_id
+    job_dir = (
+        DOWNLOAD_ROOT / job_id
+    )
+
 
     job_dir.mkdir(
         parents=True,
-        exist_ok=True
+        exist_ok=True,
     )
 
 
     output_template = str(
-        job_dir /
-        "%(title).150B [%(id)s].%(ext)s"
+        job_dir
+        / "%(title).150B [%(id)s].%(ext)s"
     )
 
 
-    common = {
+    common_options = {
 
         "outtmpl": output_template,
 
@@ -501,18 +612,24 @@ async def download(request: DownloadRequest):
 
         "socket_timeout": 30,
 
+        "windowsfilenames": True,
+
         "js_runtimes": {
-            "node": {}
+            "node": {},
         },
 
-        "windowsfilenames": True,
+        "extractor_args": {
+            "youtubepot-bgutilhttp": {
+                "base_url": "http://127.0.0.1:4416",
+            },
+        },
     }
 
 
     if mode == "video":
 
         ydl_opts = {
-            **common,
+            **common_options,
 
             "format": "bv*+ba/b",
 
@@ -522,7 +639,7 @@ async def download(request: DownloadRequest):
     else:
 
         ydl_opts = {
-            **common,
+            **common_options,
 
             "format": "bestaudio/best",
 
@@ -530,11 +647,9 @@ async def download(request: DownloadRequest):
                 {
                     "key": "FFmpegExtractAudio",
 
-                    "preferredcodec":
-                        audio_format,
+                    "preferredcodec": audio_format,
 
-                    "preferredquality":
-                        "192",
+                    "preferredquality": "192",
                 }
             ],
         }
@@ -542,13 +657,16 @@ async def download(request: DownloadRequest):
 
     try:
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(
+            ydl_opts
+        ) as ydl:
 
             ydl.download([url])
 
 
-        downloaded =
-            find_downloaded_file(job_dir)
+        downloaded = find_downloaded_file(
+            job_dir
+        )
 
 
         if downloaded is None:
@@ -561,13 +679,21 @@ async def download(request: DownloadRequest):
         response = FileResponse(
             path=str(downloaded),
 
-            media_type="application/octet-stream",
+            media_type=(
+                "video/mp4"
+                if mode == "video"
+                else "audio/"
+                + audio_format
+            ),
 
             filename=downloaded.name,
+
+            background=BackgroundTask(
+                cleanup_job,
+                job_dir,
+            ),
         )
 
-
-        response.background = None
 
         return response
 
@@ -585,7 +711,7 @@ async def download(request: DownloadRequest):
 
         raise HTTPException(
             status_code=500,
-            detail=safe_error_message(exc)
+            detail=safe_error_message(exc),
         ) from exc
 
 
@@ -593,15 +719,17 @@ if __name__ == "__main__":
 
     import uvicorn
 
+
     port = int(
         os.environ.get(
             "PORT",
-            "10000"
+            "10000",
         )
     )
+
 
     uvicorn.run(
         "app:app",
         host="0.0.0.0",
-        port=port
+        port=port,
     )

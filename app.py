@@ -2,22 +2,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
 import yt_dlp
 import os
 import glob
 
-
-# ==========================================
-# 서버 기본 설정
-# ==========================================
-
 app = FastAPI(title="유튜브 통합 다운로더")
-
-
-# ==========================================
-# CORS 설정
-# ==========================================
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,19 +16,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# ==========================================
-# 다운로드 폴더
-# ==========================================
-
 DOWNLOAD_DIR = "./downloads"
-
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-
-# ==========================================
-# 사용자가 보내는 데이터
-# ==========================================
 
 class DownloadRequest(BaseModel):
     url: str
@@ -47,45 +26,26 @@ class DownloadRequest(BaseModel):
     audio_codec: str = "mp3"
 
 
-# ==========================================
-# 웹페이지 화면
-# ==========================================
-
 HTML_CONTENT = """
 <!DOCTYPE html>
-
 <html lang="ko">
-
 <head>
-
     <meta charset="UTF-8">
-
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>유튜브 통합 다운로더</title>
-
     <script src="https://cdn.tailwindcss.com"></script>
-
 </head>
-
 
 <body class="bg-slate-950 text-white min-h-screen flex items-center justify-center p-4 font-sans">
 
-
 <div class="bg-slate-900 p-8 rounded-3xl shadow-2xl w-full max-w-xl border border-slate-800">
 
-
-    <!-- 제목 -->
-
     <div class="flex items-center gap-3 mb-6">
-
         <div class="p-3 bg-red-600/20 text-red-500 rounded-2xl border border-red-500/30 text-2xl">
             🚀
         </div>
 
         <div>
-
             <h1 class="text-2xl font-black tracking-tight text-white">
                 유튜브 통합 다운로더
             </h1>
@@ -93,20 +53,13 @@ HTML_CONTENT = """
             <p class="text-xs text-slate-400">
                 영상 또는 음원을 다운로드하세요
             </p>
-
         </div>
-
     </div>
-
-
-
-    <!-- URL 입력 -->
 
     <div class="space-y-5">
 
         <div>
-
-            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+            <label class="block text-xs font-semibold text-slate-400 mb-2">
                 유튜브 링크
             </label>
 
@@ -114,260 +67,156 @@ HTML_CONTENT = """
                 type="text"
                 id="urlInput"
                 placeholder="https://www.youtube.com/watch?v=..."
-                class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 text-white placeholder-slate-600 text-sm"
+                class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm"
             >
-
         </div>
 
-
-
-        <!-- 다운로드 종류 -->
-
         <div>
-
-            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+            <label class="block text-xs font-semibold text-slate-400 mb-2">
                 다운로드 모드
             </label>
 
             <select
                 id="modeInput"
                 onchange="toggleMode()"
-                class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 text-white text-sm"
+                class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm"
             >
-
-                <option value="video">
-                    🎥 영상 다운로드
-                </option>
-
-                <option value="audio">
-                    🎵 음원만 다운로드
-                </option>
-
+                <option value="video">🎥 영상 다운로드</option>
+                <option value="audio">🎵 음원만 다운로드</option>
             </select>
-
         </div>
-
-
-
-        <!-- 음원 형식 -->
 
         <div id="audioOptionsDiv" class="hidden">
 
-            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+            <label class="block text-xs font-semibold text-slate-400 mb-2">
                 음원 포맷
             </label>
 
             <select
                 id="audioCodecInput"
-                class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white text-sm"
+                class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm"
             >
-
-                <option value="mp3">
-                    MP3
-                </option>
-
-                <option value="wav">
-                    WAV
-                </option>
-
-                <option value="flac">
-                    FLAC
-                </option>
-
-                <option value="m4a">
-                    M4A
-                </option>
-
-                <option value="ogg">
-                    OGG
-                </option>
-
+                <option value="mp3">MP3</option>
+                <option value="wav">WAV</option>
+                <option value="flac">FLAC</option>
+                <option value="m4a">M4A</option>
+                <option value="ogg">OGG</option>
             </select>
 
         </div>
 
-
-
-        <!-- 다운로드 버튼 -->
-
         <button
             onclick="startDownload()"
             id="downloadBtn"
-            class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3.5 px-4 rounded-xl transition shadow-lg flex items-center justify-center gap-2 text-sm cursor-pointer"
+            class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3.5 px-4 rounded-xl"
         >
-
-            <span>
-                다운로드 시작
-            </span>
-
+            다운로드 시작
         </button>
 
     </div>
-
-
-
-    <!-- 상태 표시 -->
 
     <div id="statusArea" class="mt-6 hidden">
 
         <div class="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-center">
 
-            <p id="statusText"
-               class="text-sm font-medium text-slate-300">
-
+            <p id="statusText" class="text-sm font-medium text-slate-300">
                 처리 중...
-
             </p>
 
         </div>
 
     </div>
 
-
 </div>
-
 
 
 <script>
 
-
-// ==========================================
-// 영상 / 음원 선택
-// ==========================================
-
 function toggleMode() {
 
-    const mode =
-        document.getElementById('modeInput').value;
+    const mode = document.getElementById("modeInput").value;
+    const audioDiv = document.getElementById("audioOptionsDiv");
+    const btn = document.getElementById("downloadBtn");
 
-    const audioDiv =
-        document.getElementById('audioOptionsDiv');
+    if (mode === "audio") {
 
-    const btn =
-        document.getElementById('downloadBtn');
-
-
-    if (mode === 'audio') {
-
-        audioDiv.classList.remove('hidden');
+        audioDiv.classList.remove("hidden");
 
         btn.className =
-            "w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-xl transition shadow-lg flex items-center justify-center gap-2 text-sm cursor-pointer";
+            "w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-xl";
 
-    }
+    } else {
 
-    else {
-
-        audioDiv.classList.add('hidden');
+        audioDiv.classList.add("hidden");
 
         btn.className =
-            "w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3.5 px-4 rounded-xl transition shadow-lg flex items-center justify-center gap-2 text-sm cursor-pointer";
+            "w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3.5 px-4 rounded-xl";
 
     }
-
 }
 
 
-
-// ==========================================
-// 다운로드 시작
-// ==========================================
-
 async function startDownload() {
 
-
     const url =
-        document.getElementById('urlInput').value.trim();
-
+        document.getElementById("urlInput").value.trim();
 
     const mode =
-        document.getElementById('modeInput').value;
-
+        document.getElementById("modeInput").value;
 
     const audio_codec =
-        document.getElementById('audioCodecInput').value;
-
+        document.getElementById("audioCodecInput").value;
 
     const btn =
-        document.getElementById('downloadBtn');
-
+        document.getElementById("downloadBtn");
 
     const statusArea =
-        document.getElementById('statusArea');
-
+        document.getElementById("statusArea");
 
     const statusText =
-        document.getElementById('statusText');
+        document.getElementById("statusText");
 
-
-
-    // URL이 없는 경우
 
     if (!url) {
 
-        alert('유튜브 링크를 입력해주세요.');
+        alert("유튜브 링크를 입력해주세요.");
 
         return;
-
     }
 
 
-
-    // 버튼 잠금
-
     btn.disabled = true;
 
-    btn.classList.add(
-        'opacity-50',
-        'cursor-not-allowed'
-    );
-
-
-    statusArea.classList.remove('hidden');
-
+    statusArea.classList.remove("hidden");
 
     statusText.innerText =
-        '다운로드를 준비하고 있습니다...';
-
+        "다운로드를 준비하고 있습니다...";
 
 
     try {
 
-
-        // 서버에 다운로드 요청
-
         const response = await fetch(
-            '/download',
+            "/download",
             {
-
-                method: 'POST',
+                method: "POST",
 
                 headers: {
-                    'Content-Type': 'application/json'
+                    "Content-Type": "application/json"
                 },
 
                 body: JSON.stringify({
-
                     url: url,
-
                     mode: mode,
-
                     audio_codec: audio_codec
-
                 })
-
             }
         );
 
 
-
-        // 오류 발생
-
         if (!response.ok) {
 
             let errorMessage =
-                '다운로드에 실패했습니다.';
-
+                "다운로드에 실패했습니다.";
 
             try {
 
@@ -377,141 +226,85 @@ async function startDownload() {
                 errorMessage =
                     err.detail || errorMessage;
 
-            }
-
-            catch (e) {
-
-                // JSON 오류가 아닌 경우
-            }
-
+            } catch (e) {}
 
             throw new Error(errorMessage);
-
         }
 
 
-
-        // 다운로드 파일 받기
-
         statusText.innerText =
-            '다운로드 완료! 파일을 저장합니다...';
+            "다운로드 완료! 파일을 저장합니다...";
 
 
         const blob =
             await response.blob();
 
-
         const downloadUrl =
             window.URL.createObjectURL(blob);
 
-
         const a =
-            document.createElement('a');
+            document.createElement("a");
 
+        a.href = downloadUrl;
 
-        a.href =
-            downloadUrl;
-
-
-
-        // 기본 파일명
 
         let filename =
-            mode === 'video'
-                ? 'downloaded_video.mp4'
-                : 'extracted_audio.' + audio_codec;
+            mode === "video"
+                ? "downloaded_video.mp4"
+                : "extracted_audio." + audio_codec;
 
-
-
-        // 서버가 보내준 파일명 확인
 
         const disposition =
-            response.headers.get(
-                'content-disposition'
-            );
+            response.headers.get("content-disposition");
 
 
         if (
             disposition &&
-            disposition.includes('filename=')
+            disposition.includes("filename=")
         ) {
 
             filename =
                 decodeURIComponent(
                     disposition
-                        .split('filename=')[1]
-                        .replace(/["']/g, '')
+                        .split("filename=")[1]
+                        .replace(/["']/g, "")
                 );
-
         }
 
 
-
-        a.download =
-            filename;
-
+        a.download = filename;
 
         document.body.appendChild(a);
 
-
         a.click();
-
 
         a.remove();
 
-
-        window.URL.revokeObjectURL(
-            downloadUrl
-        );
-
+        window.URL.revokeObjectURL(downloadUrl);
 
 
         statusText.innerText =
-            '성공적으로 저장되었습니다!';
+            "성공적으로 저장되었습니다!";
 
 
-    }
-
-    catch (error) {
-
+    } catch (error) {
 
         statusText.innerText =
-            '오류 발생: ' + error.message;
+            "오류 발생: " + error.message;
 
-
-    }
-
-
-    finally {
-
-
-        // 버튼 다시 활성화
+    } finally {
 
         btn.disabled = false;
 
-
-        btn.classList.remove(
-            'opacity-50',
-            'cursor-not-allowed'
-        );
-
     }
-
 }
-
 
 </script>
 
-
 </body>
-
 </html>
 """
 
-
-# ==========================================
-# 첫 화면
-# ==========================================
 
 @app.get("/", response_class=HTMLResponse)
 async def get_index():
@@ -519,177 +312,97 @@ async def get_index():
     return HTML_CONTENT
 
 
-
-# ==========================================
-# 다운로드 기능
-# ==========================================
-
 @app.post("/download")
 async def download_media(data: DownloadRequest):
 
     try:
 
-
-        # --------------------------------------
         # 기존 다운로드 파일 삭제
-        # --------------------------------------
-
         for f in glob.glob(
-            os.path.join(
-                DOWNLOAD_DIR,
-                "*"
-            )
+            os.path.join(DOWNLOAD_DIR, "*")
         ):
 
             try:
-
                 os.remove(f)
 
-            except:
-
+            except Exception:
                 pass
 
 
-
-        # --------------------------------------
         # yt-dlp 기본 설정
-        # --------------------------------------
-
         ydl_opts = {
-
-            'outtmpl':
-                os.path.join(
-                    DOWNLOAD_DIR,
-                    '%(title)s.%(ext)s'
-                ),
-
-            'restrictfilenames':
-                True,
-
-            'noplaylist':
-                True,
-
+            "outtmpl": os.path.join(
+                DOWNLOAD_DIR,
+                "%(title)s.%(ext)s"
+            ),
+            "restrictfilenames": True,
+            "noplaylist": True,
         }
 
 
-
-        # --------------------------------------
         # 음원 다운로드
-        # --------------------------------------
-
         if data.mode == "audio":
 
-
             ydl_opts.update({
 
-                'format':
-                    'bestaudio/best',
+                "format": "bestaudio/best",
 
-
-                'postprocessors': [
-
+                "postprocessors": [
                     {
-
-                        'key':
-                            'FFmpegExtractAudio',
-
-                        'preferredcodec':
-                            data.audio_codec,
-
-                        'preferredquality':
-                            '320'
-                            if data.audio_codec
-                            in ['mp3', 'm4a']
-                            else None,
-
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": data.audio_codec,
+                        "preferredquality": (
+                            "320"
+                            if data.audio_codec in ["mp3", "m4a"]
+                            else None
+                        ),
                     }
-
                 ],
-
             })
 
 
-
-        # --------------------------------------
         # 영상 다운로드
-        # --------------------------------------
-
         else:
 
-
             ydl_opts.update({
 
-                'format':
-                    'bv*+ba/b',
+                "format": "bv*+ba/b",
 
-                'merge_output_format':
-                    'mp4',
-
+                "merge_output_format": "mp4",
             })
 
 
-
-        # --------------------------------------
         # yt-dlp 실행
-        # --------------------------------------
-
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 
-            info =
-                ydl.extract_info(
-                    data.url,
-                    download=True
-                )
+            info = ydl.extract_info(
+                data.url,
+                download=True
+            )
+
+            filename = ydl.prepare_filename(info)
 
 
-            filename =
-                ydl.prepare_filename(info)
-
-
-
-        # --------------------------------------
         # 최종 파일 이름
-        # --------------------------------------
-
         if data.mode == "audio":
 
+            base, _ = os.path.splitext(filename)
 
-            base, _ =
-                os.path.splitext(filename)
-
-
-            filename =
-                base + "." + data.audio_codec
-
-
+            filename = base + "." + data.audio_codec
 
         else:
 
+            base, _ = os.path.splitext(filename)
 
-            base, _ =
-                os.path.splitext(filename)
-
-
-            filename =
-                base + ".mp4"
+            filename = base + ".mp4"
 
 
-
-        # --------------------------------------
-        # 파일 존재 여부 확인
-        # --------------------------------------
-
+        # 파일 확인
         if not os.path.exists(filename):
 
-
-            files =
-                glob.glob(
-                    os.path.join(
-                        DOWNLOAD_DIR,
-                        "*"
-                    )
-                )
-
+            files = glob.glob(
+                os.path.join(DOWNLOAD_DIR, "*")
+            )
 
             if not files:
 
@@ -698,81 +411,49 @@ async def download_media(data: DownloadRequest):
                     detail="다운로드된 파일을 찾을 수 없습니다."
                 )
 
-
-            filename =
-                max(
-                    files,
-                    key=os.path.getctime
-                )
+            filename = max(
+                files,
+                key=os.path.getctime
+            )
 
 
-
-        # --------------------------------------
-        # 파일 전송
-        # --------------------------------------
-
+        # 파일 보내기
         return FileResponse(
-
             path=filename,
-
-            filename=
-                os.path.basename(filename),
-
-            media_type=
-                'application/octet-stream'
-
+            filename=os.path.basename(filename),
+            media_type="application/octet-stream"
         )
-
 
 
     except Exception as e:
 
-
-        # --------------------------------------
-        # 오류 내용을 사용자에게 표시
-        # --------------------------------------
-
         raise HTTPException(
-
             status_code=500,
-
             detail=str(e)
-
         )
 
 
-
 # ==========================================
-# 서버 실행
+# 서버 시작
 # ==========================================
 
 if __name__ == "__main__":
 
-
     import uvicorn
 
-
-    # Render가 사용하는 PORT 가져오기
-    port =
-        int(
-            os.environ.get(
-                "PORT",
-                8000
-            )
+    port = int(
+        os.environ.get(
+            "PORT",
+            8000
         )
-
-
-    print(
-        "🚀 유튜브 통합 다운로드 서버가 시작되었습니다!"
     )
 
+    print(
+        "유튜브 통합 다운로드 서버가 시작되었습니다!"
+    )
 
     uvicorn.run(
-
         app,
-
         host="0.0.0.0",
-
         port=port
-
     )

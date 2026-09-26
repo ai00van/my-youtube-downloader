@@ -48,9 +48,11 @@ RUN python3 -m pip install \
     -r /app/requirements.txt
 
 COPY app.py /app/app.py
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
 
 RUN mkdir -p /app/downloads
 
 EXPOSE 4416
 
-CMD ["sh", "-c", "node /opt/bgutil/build/main.js --host 127.0.0.1 --port 4416 & exec python3 -m uvicorn app:app --host 0.0.0.0 --port ${PORT:-10000}"]
+CMD ["/app/start.sh"]

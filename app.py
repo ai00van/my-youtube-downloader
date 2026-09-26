@@ -21,7 +21,6 @@ app.add_middleware(
 
 
 DOWNLOAD_DIR = "./downloads"
-
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
@@ -44,12 +43,9 @@ HTML_CONTENT = """
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 
-
 <body class="bg-slate-950 text-white min-h-screen flex items-center justify-center p-4 font-sans">
 
-
 <div class="bg-slate-900 p-8 rounded-3xl shadow-2xl w-full max-w-xl border border-slate-800">
-
 
     <div class="flex items-center gap-3 mb-6">
 
@@ -58,7 +54,6 @@ HTML_CONTENT = """
         </div>
 
         <div>
-
             <h1 class="text-2xl font-black tracking-tight text-white">
                 유튜브 통합 다운로더
             </h1>
@@ -66,14 +61,12 @@ HTML_CONTENT = """
             <p class="text-xs text-slate-400">
                 영상 다운로드 또는 음원 추출
             </p>
-
         </div>
 
     </div>
 
 
     <div class="space-y-5">
-
 
         <div>
 
@@ -104,7 +97,7 @@ HTML_CONTENT = """
             >
 
                 <option value="video">
-                    🎥 영상 다운로드
+                    🎥 영상 전체 다운로드
                 </option>
 
                 <option value="audio">
@@ -180,12 +173,10 @@ HTML_CONTENT = """
 
     </div>
 
-
 </div>
 
 
 <script>
-
 
 function toggleMode() {
 
@@ -220,7 +211,6 @@ function toggleMode() {
 
 async function startDownload() {
 
-
     const url =
         document.getElementById("urlInput").value.trim();
 
@@ -245,7 +235,6 @@ async function startDownload() {
         alert("유튜브 링크를 입력해주세요.");
 
         return;
-
     }
 
 
@@ -260,12 +249,20 @@ async function startDownload() {
     statusArea.classList.remove("hidden");
 
 
-    statusText.innerText =
-        "유튜브에서 파일을 준비하고 있습니다...";
+    if (mode === "video") {
+
+        statusText.innerText =
+            "유튜브 영상을 다운로드하고 있습니다...";
+
+    } else {
+
+        statusText.innerText =
+            "유튜브 음원을 추출하고 있습니다...";
+
+    }
 
 
     try {
-
 
         const response =
             await fetch("/download", {
@@ -291,10 +288,8 @@ async function startDownload() {
 
         if (!response.ok) {
 
-
             let errorMessage =
                 "다운로드 실패";
-
 
             try {
 
@@ -311,14 +306,12 @@ async function startDownload() {
 
             }
 
-
             throw new Error(errorMessage);
-
         }
 
 
         statusText.innerText =
-            "다운로드 완료! 저장을 시작합니다...";
+            "다운로드 완료! 파일을 저장합니다...";
 
 
         const blob =
@@ -333,8 +326,7 @@ async function startDownload() {
             document.createElement("a");
 
 
-        a.href =
-            downloadUrl;
+        a.href = downloadUrl;
 
 
         let filename;
@@ -370,13 +362,10 @@ async function startDownload() {
                         .split("filename=")[1]
                         .replace(/["']/g, "")
                 );
-
         }
 
 
-        a.download =
-            filename;
-
+        a.download = filename;
 
         document.body.appendChild(a);
 
@@ -396,16 +385,12 @@ async function startDownload() {
 
     } catch (error) {
 
-
         statusText.innerText =
             "오류 발생: " + error.message;
 
-
     } finally {
 
-
         btn.disabled = false;
-
 
         btn.classList.remove(
             "opacity-50",
@@ -416,12 +401,9 @@ async function startDownload() {
 
 }
 
-
 </script>
 
-
 </body>
-
 </html>
 """
 
@@ -435,9 +417,11 @@ async def get_index():
 @app.post("/download")
 async def download_media(data: DownloadRequest):
 
-
     try:
 
+        # -------------------------------
+        # 입력값 확인
+        # -------------------------------
 
         if not data.url.strip():
 
@@ -447,10 +431,7 @@ async def download_media(data: DownloadRequest):
             )
 
 
-        if data.mode not in [
-            "video",
-            "audio"
-        ]:
+        if data.mode not in ["video", "audio"]:
 
             raise HTTPException(
                 status_code=400,
@@ -472,7 +453,9 @@ async def download_media(data: DownloadRequest):
             )
 
 
-        # 기존 다운로드 파일 삭제
+        # -------------------------------
+        # 기존 파일 삭제
+        # -------------------------------
 
         for f in glob.glob(
             os.path.join(
@@ -492,9 +475,9 @@ async def download_media(data: DownloadRequest):
                 pass
 
 
-        # --------------------------------------------------
-        # yt-dlp 설정
-        # --------------------------------------------------
+        # -------------------------------
+        # yt-dlp 기본 설정
+        # -------------------------------
 
         ydl_opts = {
 
@@ -507,7 +490,12 @@ async def download_media(data: DownloadRequest):
 
             "noplaylist": True,
 
-            # PO Token Provider가 사용하는 mweb 클라이언트
+            "quiet": False,
+
+            "no_warnings": False,
+
+            # 현재 YouTube PO Token Provider
+            # 권장 클라이언트
             "extractor_args": {
 
                 "youtube": {
@@ -523,12 +511,11 @@ async def download_media(data: DownloadRequest):
         }
 
 
-        # --------------------------------------------------
-        # 오디오
-        # --------------------------------------------------
+        # -------------------------------
+        # 오디오 다운로드
+        # -------------------------------
 
         if data.mode == "audio":
-
 
             ydl_opts.update({
 
@@ -547,11 +534,9 @@ async def download_media(data: DownloadRequest):
 
                         "preferredquality":
                             "320"
-
-                        if data.audio_codec
-                        in ["mp3", "m4a"]
-
-                        else None
+                            if data.audio_codec
+                            in ["mp3", "m4a"]
+                            else None
 
                     }
 
@@ -560,12 +545,11 @@ async def download_media(data: DownloadRequest):
             })
 
 
-        # --------------------------------------------------
-        # 영상
-        # --------------------------------------------------
+        # -------------------------------
+        # 영상 다운로드
+        # -------------------------------
 
         else:
-
 
             ydl_opts.update({
 
@@ -578,68 +562,63 @@ async def download_media(data: DownloadRequest):
             })
 
 
-        # --------------------------------------------------
-        # 다운로드
-        # --------------------------------------------------
+        # -------------------------------
+        # yt-dlp 실행
+        # -------------------------------
 
         with yt_dlp.YoutubeDL(
             ydl_opts
         ) as ydl:
 
+            info = ydl.extract_info(
+                data.url,
+                download=True
+            )
 
-            info =
-                ydl.extract_info(
-                    data.url,
-                    download=True
-                )
-
-
-            filename =
-                ydl.prepare_filename(
-                    info
-                )
+            filename = ydl.prepare_filename(info)
 
 
-            if data.mode == "audio":
+        # -------------------------------
+        # 오디오 파일 확장자
+        # -------------------------------
+
+        if data.mode == "audio":
+
+            base, _ = os.path.splitext(filename)
+
+            filename = (
+                base
+                + "."
+                + data.audio_codec
+            )
 
 
-                base, _ =
-                    os.path.splitext(
-                        filename
-                    )
+        # -------------------------------
+        # 영상 파일 확장자
+        # -------------------------------
+
+        else:
+
+            base, _ = os.path.splitext(filename)
+
+            filename = (
+                base
+                + ".mp4"
+            )
 
 
-                filename =
-                    base + "." + data.audio_codec
-
-
-            else:
-
-
-                base, _ =
-                    os.path.splitext(
-                        filename
-                    )
-
-
-                filename =
-                    base + ".mp4"
-
-
-        # --------------------------------------------------
-        # 파일 확인
-        # --------------------------------------------------
+        # -------------------------------
+        # 파일 존재 확인
+        # -------------------------------
 
         if not os.path.exists(filename):
 
-
-            files =
-                glob.glob(
-                    os.path.join(
-                        DOWNLOAD_DIR,
-                        "*"
-                    )
+            files = glob.glob(
+                os.path.join(
+                    DOWNLOAD_DIR,
+                    "*"
                 )
+            )
 
 
             if not files:
@@ -650,16 +629,15 @@ async def download_media(data: DownloadRequest):
                 )
 
 
-            filename =
-                max(
-                    files,
-                    key=os.path.getctime
-                )
+            filename = max(
+                files,
+                key=os.path.getctime
+            )
 
 
-        # --------------------------------------------------
+        # -------------------------------
         # 파일 전송
-        # --------------------------------------------------
+        # -------------------------------
 
         return FileResponse(
 
@@ -682,7 +660,6 @@ async def download_media(data: DownloadRequest):
 
     except Exception as e:
 
-
         print(
             "다운로드 오류:",
             repr(e)
@@ -698,31 +675,27 @@ async def download_media(data: DownloadRequest):
         )
 
 
-# ------------------------------------------------------
+# -------------------------------
 # Render 실행
-# ------------------------------------------------------
+# -------------------------------
 
 if __name__ == "__main__":
 
-
     import uvicorn
 
-
-    port =
-        int(
-            os.environ.get(
-                "PORT",
-                8000
-            )
+    port = int(
+        os.environ.get(
+            "PORT",
+            8000
         )
+    )
 
+    print(
+        "유튜브 통합 다운로드 서버가 시작되었습니다!"
+    )
 
     uvicorn.run(
-
         app,
-
         host="0.0.0.0",
-
         port=port
-
     )

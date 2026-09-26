@@ -1,12 +1,14 @@
 FROM node:26-bookworm-slim AS bgutil-builder
 
-USER node
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+WORKDIR /tmp
 
 RUN git clone --depth 1 --branch 2.0.0 \
     https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git \
-    /tmp/bgutil
+    bgutil
 
 WORKDIR /tmp/bgutil/server
 
@@ -26,7 +28,6 @@ RUN apt-get update \
         python3-pip \
         ffmpeg \
         ca-certificates \
-        git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

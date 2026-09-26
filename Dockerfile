@@ -1,8 +1,8 @@
-FROM node:22-bookworm-slim
+FROM node:22-bookworm
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+ENV PYTHONUNBUFFERED=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
@@ -18,26 +18,27 @@ RUN apt-get update \
 COPY requirements.txt /app/requirements.txt
 
 RUN python3 -m pip install \
-        --break-system-packages \
-        -r /app/requirements.txt
+    --break-system-packages \
+    --no-cache-dir \
+    -r /app/requirements.txt
 
 RUN git clone \
-        --depth 1 \
-        --branch 2.0.0 \
-        https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git \
-        /opt/bgutil-ytdlp-pot-provider \
-    && cd /opt/bgutil-ytdlp-pot-provider/server \
-    && npm ci --no-audit --no-fund \
+    --depth 1 \
+    --branch 2.0.0 \
+    https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git \
+    /opt/bgutil-ytdlp-pot-provider
+
+WORKDIR /opt/bgutil-ytdlp-pot-provider/server
+
+RUN npm ci \
     && npx tsc
+
+WORKDIR /app
 
 COPY app.py /app/app.py
 
 RUN mkdir -p /app/downloads
 
-RUN python3 -m py_compile /app/app.py \
-    && python3 -c "import yt_dlp; print('yt-dlp:', yt_dlp.version.__version__)" \
-    && test -f /opt/bgutil-ytdlp-pot-provider/server/build/main.js
+EXPOSE 8000
 
-EXPOSE 10000
-
-CMD ["sh", "-c", "node /opt/bgutil-ytdlp-pot-provider/server/build/main.js --host 127.0.0.1 --port 4416 & exec python3 -m uvicorn app:app --host 0.0.0.0 --port 10000"]
+CMD ["sh", "-c", "node /opt/bgutil-ytdlp-pot-provider/server/build/main.js --host 127.0.0.1 --port 4416 & exec python3 -m uvicorn app:app --host 0.0.0.0 --port 8000"]

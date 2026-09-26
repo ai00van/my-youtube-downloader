@@ -1,52 +1,53 @@
-FROM python:3.12-slim
+FROM node:22-bookworm-slim
 
-ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
 
-# 기본 프로그램 설치
-RUN apt-get update && \
-    apt-get install -y \
-    curl \
-    git \
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
     ffmpeg \
-    ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+    git \
+    build-essential \
+    libcairo2-dev \
+    libjpeg62-turbo-dev \
+    libpango1.0-dev \
+    libgif-dev \
+    librsvg2-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 
-# Node.js 22 설치
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get update && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv /opt/venv
 
-# 작업 폴더
-WORKDIR /app
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Python 패키지 설치
-COPY requirements.txt .
+COPY requirements.txt /app/requirements.txt
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install -r /app/requirements.txt
 
-# bgutil POT Provider 설치
-RUN git clone --depth 1 \
+RUN git clone \
+    --single-branch \
+    --branch 2.0.0 \
     https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git \
-    /app/bgutil
+    /opt/bgutil-ytdlp-pot-provider
 
-WORKDIR /app/bgutil/server
+WORKDIR /opt/bgutil-ytdlp-pot-provider/server
 
-RUN npm install
-RUN npx tsc
+RUN npm ci --omit=dev --no-audit --no-fund \
+    && npm ci --no-audit --no-fund \
+    && npx tsc
 
-# 다시 앱 폴더로
 WORKDIR /app
 
-# FastAPI 앱 복사
-COPY app.py .
+COPY app.py /app/app.py
 
-# 다운로드 폴더
 RUN mkdir -p /app/downloads
 
-# Node.js를 yt-dlp JS 런타임으로 사용
-ENV YTDLP_JS_RUNTIME=node
+EXPOSE 10000
 
-# 서버 시작
-CMD ["sh", "-c", "node /app/bgutil/server/build/main.js & sleep 5 && python app.py"]
+CMD ["sh", "-c", "node /opt/bgutil-ytdlp-pot-provider/server/build/main.js --host 127.0.0.1 --port 4416 & exec uvicorn app:app --host 0.0.0.0 --port ${PORT:-10000}"]

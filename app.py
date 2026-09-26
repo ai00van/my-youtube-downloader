@@ -41,33 +41,33 @@ HTML_CONTENT = """
             </div>
             <div>
                 <h1 class="text-2xl font-black tracking-tight text-white">유튜브 통합 다운로더</h1>
-                <p class="text-xs text-slate-400">영상 다운로드 또는 음원만 따로 추출 선택 가능</p>
+                <p class="text-xs text-slate-400">영상 또는 음원 추출 선택</p>
             </div>
         </div>
         
         <div class="space-y-5">
             <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">유튜브 개별 링크 (URL)</label>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">유튜브 링크 (URL)</label>
                 <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=..." 
                     class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 text-white placeholder-slate-600 text-sm">
             </div>
             
             <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">다운로드 모드 선택</label>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">다운로드 모드</label>
                 <select id="modeInput" onchange="toggleMode()" class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 text-white text-sm">
-                    <option value="video">🎥 영상 전체 다운로드 (화면 + 음원 포함)</option>
-                    <option value="audio">🎵 음원(오디오)만 따로 추출하기</option>
+                    <option value="video">🎥 영상 전체 다운로드</option>
+                    <option value="audio">🎵 음원(오디오)만 추출</option>
                 </select>
             </div>
 
             <div id="audioOptionsDiv" class="hidden">
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">추출할 음원 포맷 선택</label>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">음원 포맷</label>
                 <select id="audioCodecInput" class="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white text-sm">
-                    <option value="mp3">MP3 (최고 음질 320kbps - 추천)</option>
-                    <option value="wav">WAV (무손실 원음 포맷)</option>
-                    <option value="flac">FLAC (고음질 무손실 압축 포맷)</option>
-                    <option value="m4a">M4A (애플/모바일 최적화)</option>
-                    <option value="ogg">OGG (오픈소스 오디오)</option>
+                    <option value="mp3">MP3 (최고 음질 320kbps)</option>
+                    <option value="wav">WAV (무손실 원음)</option>
+                    <option value="flac">FLAC (무손실 압축)</option>
+                    <option value="m4a">M4A (모바일 최적화)</option>
+                    <option value="ogg">OGG (오픈소스)</option>
                 </select>
             </div>
 
@@ -115,9 +115,7 @@ HTML_CONTENT = """
             btn.disabled = true;
             btn.classList.add('opacity-50', 'cursor-not-allowed');
             statusArea.classList.remove('hidden');
-            statusText.innerText = mode === 'video' 
-                ? '유튜브 영상을 다운로드 및 병합 중입니다... (잠시만 기다려주세요)' 
-                : '유튜브 서버에서 음원을 추출 및 변환 중입니다... (잠시만 기다려주세요)';
+            statusText.innerText = '서버에서 유튜브 데이터를 안전하게 가져오는 중... (잠시만 기다려주세요)';
 
             try {
                 const response = await fetch('/download', {
@@ -149,7 +147,7 @@ HTML_CONTENT = """
                 a.click();
                 a.remove();
                 
-                statusText.innerText = '성공적으로 내 컴퓨터에 저장되었습니다!';
+                statusText.innerText = '성공적으로 저장되었습니다!';
             } catch (error) {
                 statusText.innerText = '오류 발생: ' + error.message;
             } finally {
@@ -175,14 +173,14 @@ async def download_media(data: DownloadRequest):
             except:
                 pass
 
+        # 봇 차단 우회를 위한 핵심 최신 설정 적용
         ydl_opts = {
             'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
             'restrictfilenames': True,
             'noplaylist': True,
-            # 봇 차단을 우회하기 위해 안드로이드 플레이어 클라이언트 속성 지정
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android']
+                    'player_client': ['default', '-android_sdkless']
                 }
             }
         }

@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 
 app = FastAPI(title="YouTube 통합 다운로드 서버")
 
-
 DOWNLOAD_ROOT = Path("/app/downloads")
 DOWNLOAD_ROOT.mkdir(parents=True, exist_ok=True)
 
@@ -78,7 +77,6 @@ async def home():
         name="viewport"
         content="width=device-width, initial-scale=1.0"
     >
-
     <title>YouTube 다운로드</title>
 
     <style>
@@ -204,6 +202,7 @@ async function downloadVideo() {
     }
 
     button.disabled = true;
+
     status.textContent =
         "다운로드를 준비하고 있습니다...";
 
@@ -252,7 +251,7 @@ async function downloadVideo() {
 
     } catch (error) {
         status.textContent =
-            "다운로드 오류가 발생했습니다.\\n\\n" +
+            "다운로드 오류가 발생했습니다.\n\n" +
             (error.message || error);
 
     } finally {
@@ -306,6 +305,7 @@ async def download_video(
         )
 
     job_id = uuid.uuid4().hex
+
     job_dir = DOWNLOAD_ROOT / job_id
 
     job_dir.mkdir(
@@ -329,10 +329,7 @@ async def download_video(
         ]
 
     else:
-        ydl_format = (
-            "bv*+ba/"
-            "best"
-        )
+        ydl_format = "bv*+ba/best"
 
         postprocessors = []
 
@@ -349,6 +346,8 @@ async def download_video(
 
         "no_warnings": False,
 
+        "verbose": True,
+
         "retries": 3,
 
         "fragment_retries": 3,
@@ -360,6 +359,12 @@ async def download_video(
         "postprocessors": postprocessors,
 
         "extractor_args": {
+            "youtube": {
+                "player_client": [
+                    "mweb"
+                ]
+            },
+
             "youtubepot-bgutilhttp": {
                 "base_url": [
                     "http://127.0.0.1:4416"
@@ -369,7 +374,7 @@ async def download_video(
 
         "js_runtimes": {
             "node": {}
-        },
+        }
     }
 
     try:
@@ -390,7 +395,7 @@ async def download_video(
             "message": "다운로드가 완료되었습니다.",
             "filename": downloaded_file.name,
             "download_url": (
-                "/api/file/"
+                f"/api/file/"
                 f"{job_id}/"
                 f"{downloaded_file.name}"
             ),
@@ -403,7 +408,7 @@ async def download_video(
             status_code=500,
             detail=(
                 "YouTube 다운로드에 실패했습니다. "
-                "서버 로그를 확인해주세요."
+                "Render 로그를 확인해주세요."
             ),
         ) from exc
 

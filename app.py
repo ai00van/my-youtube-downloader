@@ -9,10 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import yt_dlp
 
+
 app = FastAPI(title="YouTube 통합 다운로드 서버")
 
 DOWNLOAD_DIR = "/app/downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -156,7 +158,6 @@ button:disabled {
     name="mode"
     value="video"
     checked
-    onchange="changeMode()"
 >
 영상
 </label>
@@ -166,7 +167,6 @@ button:disabled {
     type="radio"
     name="mode"
     value="audio"
-    onchange="changeMode()"
 >
 음악
 </label>
@@ -185,10 +185,7 @@ button:disabled {
 
 </div>
 
-<button
-    id="downloadButton"
-    onclick="downloadVideo()"
->
+<button id="downloadButton" type="button">
 다운로드
 </button>
 
@@ -197,20 +194,26 @@ button:disabled {
 </div>
 
 <script>
+"use strict";
+
+const NEWLINE = String.fromCharCode(10);
+
 
 function changeMode() {
 
-    const mode =
+    const selected =
         document.querySelector(
             'input[name="mode"]:checked'
-        ).value;
-
-    const audioOptions =
-        document.getElementById(
-            "audioOptions"
         );
 
-    if (mode === "audio") {
+    const audioOptions =
+        document.getElementById("audioOptions");
+
+    if (!selected) {
+        return;
+    }
+
+    if (selected.value === "audio") {
         audioOptions.classList.remove("hidden");
     } else {
         audioOptions.classList.add("hidden");
@@ -220,22 +223,44 @@ function changeMode() {
 
 async function downloadVideo() {
 
-    const url =
-        document.getElementById("url").value.trim();
-
-    const mode =
-        document.querySelector(
-            'input[name="mode"]:checked'
-        ).value;
-
-    const audioCodec =
-        document.getElementById("audioCodec").value;
+    const urlElement =
+        document.getElementById("url");
 
     const button =
         document.getElementById("downloadButton");
 
     const status =
         document.getElementById("status");
+
+    const modeElement =
+        document.querySelector(
+            'input[name="mode"]:checked'
+        );
+
+    const audioCodecElement =
+        document.getElementById("audioCodec");
+
+
+    if (!urlElement || !button || !status || !modeElement) {
+
+        console.error(
+            "필수 HTML 요소를 찾을 수 없습니다."
+        );
+
+        return;
+    }
+
+
+    const url =
+        urlElement.value.trim();
+
+    const mode =
+        modeElement.value;
+
+    const audioCodec =
+        audioCodecElement
+            ? audioCodecElement.value
+            : "mp3";
 
 
     if (!url) {
@@ -250,52 +275,110 @@ async function downloadVideo() {
     button.disabled = true;
 
     status.innerText =
-        "다운로드 준비 중입니다.\n" +
+        "다운로드 준비 중입니다." +
+        NEWLINE +
         "잠시 기다려주세요.";
 
 
     try {
 
+        console.log("다운로드 요청 시작");
+        console.log("URL:", url);
+        console.log("MODE:", mode);
+
+
         const response =
-            await fetch("/download", {
+            await fetch(
+                "/download",
+                {
+                    method: "POST",
 
-                method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
 
-                headers: {
-                    "Content-Type": "application/json"
-                },
+                    body: JSON.stringify({
+                        url: url,
+                        mode: mode,
+                        audio_codec: audioCodec
+                    })
+                }
+            );
 
-                body: JSON.stringify({
-                    url: url,
-                    mode: mode,
-                    audio_codec: audioCodec
-                })
 
-            });
+        console.log(
+            "서버 응답:",
+            response.status,
+            response.statusText
+        );
 
 
         if (!response.ok) {
 
-            const errorText =
-                await response.text();
+            let errorMessage =
+                "다운로드 서버에서 오류가 발생했습니다.";
 
-            throw new Error(errorText);
+            try {
+
+                const errorData =
+                    await response.json();
+
+                if (errorData.detail) {
+                    errorMessage =
+                        errorData.detail;
+                }
+
+            } catch (jsonError) {
+
+                try {
+
+                    const text =
+                        await response.text();
+
+                    if (text) {
+                        errorMessage = text;
+                    }
+
+                } catch (textError) {
+
+                    console.error(textError);
+
+                }
+            }
+
+            throw new Error(errorMessage);
         }
 
 
         const blob =
             await response.blob();
 
+
+        if (!blob || blob.size === 0) {
+
+            throw new Error(
+                "다운로드된 파일이 비어 있습니다."
+            );
+        }
+
+
         const downloadUrl =
             window.URL.createObjectURL(blob);
+
 
         const a =
             document.createElement("a");
 
-        a.href = downloadUrl;
+        a.href =
+            downloadUrl;
 
 
-        let filename = "download";
+        let filename =
+            mode === "audio"
+                ? "download.mp3"
+                : "download.mp4";
+
 
         const disposition =
             response.headers.get(
@@ -305,18 +388,49 @@ async function downloadVideo() {
 
         if (disposition) {
 
-            const match =
+            const utf8Match =
                 disposition.match(
-                    /filename="?([^"]+)"?/
+                    /filename\*=UTF-8''([^;]+)/i
                 );
 
-            if (match) {
-                filename = match[1];
+
+            if (utf8Match) {
+
+                try {
+
+                    filename =
+                        decodeURIComponent(
+                            utf8Match[1]
+                        );
+
+                } catch (decodeError) {
+
+                    console.error(
+                        decodeError
+                    );
+                }
+
+            } else {
+
+                const normalMatch =
+                    disposition.match(
+                        /filename="?([^"]+)"?/i
+                    );
+
+
+                if (normalMatch) {
+
+                    filename =
+                        normalMatch[1];
+
+                }
             }
         }
 
 
-        a.download = filename;
+        a.download =
+            filename;
+
 
         document.body.appendChild(a);
 
@@ -324,29 +438,93 @@ async function downloadVideo() {
 
         a.remove();
 
-        window.URL.revokeObjectURL(
-            downloadUrl
+
+        setTimeout(
+            function() {
+                window.URL.revokeObjectURL(
+                    downloadUrl
+                );
+            },
+            1000
         );
 
 
         status.innerText =
             "다운로드가 완료되었습니다.";
 
-
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            "다운로드 오류:",
+            error
+        );
+
 
         status.innerText =
-            "다운로드 오류가 발생했습니다.\n\n" +
-            error.message;
-
+            "다운로드 오류가 발생했습니다." +
+            NEWLINE +
+            NEWLINE +
+            (
+                error && error.message
+                    ? error.message
+                    : String(error)
+            );
 
     } finally {
 
         button.disabled = false;
+
     }
 }
+
+
+document.addEventListener(
+    "DOMContentLoaded",
+    function() {
+
+        const downloadButton =
+            document.getElementById(
+                "downloadButton"
+            );
+
+
+        const modeInputs =
+            document.querySelectorAll(
+                'input[name="mode"]'
+            );
+
+
+        modeInputs.forEach(
+            function(input) {
+
+                input.addEventListener(
+                    "change",
+                    changeMode
+                );
+
+            }
+        );
+
+
+        if (downloadButton) {
+
+            downloadButton.addEventListener(
+                "click",
+                downloadVideo
+            );
+
+        }
+
+
+        changeMode();
+
+
+        console.log(
+            "YouTube 다운로드 페이지 초기화 완료"
+        );
+
+    }
+);
 
 </script>
 
@@ -366,6 +544,7 @@ async def download(request: DownloadRequest):
     url = request.url.strip()
 
     if not url:
+
         raise HTTPException(
             status_code=400,
             detail="YouTube 주소가 없습니다."
@@ -437,7 +616,8 @@ async def download(request: DownloadRequest):
 
     elif request.mode == "audio":
 
-        codec = request.audio_codec.lower()
+        codec =
+            request.audio_codec.lower()
 
         codec_map = {
 
@@ -503,13 +683,24 @@ async def download(request: DownloadRequest):
 
         print("=" * 60)
 
-        print("YouTube 다운로드 시작")
+        print(
+            "YouTube 다운로드 시작"
+        )
 
-        print("URL:", url)
+        print(
+            "URL:",
+            url
+        )
 
-        print("MODE:", request.mode)
+        print(
+            "MODE:",
+            request.mode
+        )
 
-        print("JS Runtime: /usr/bin/node")
+        print(
+            "JS Runtime:",
+            "/usr/bin/node"
+        )
 
         print(
             "POT Server:",
@@ -530,9 +721,13 @@ async def download(request: DownloadRequest):
 
         print("=" * 60)
 
-        print("YT-DLP ERROR:")
+        print(
+            "YT-DLP ERROR:"
+        )
 
-        print(repr(e))
+        print(
+            repr(e)
+        )
 
         print("=" * 60)
 
@@ -583,6 +778,7 @@ async def download(request: DownloadRequest):
         key=os.path.getmtime
     )
 
+
     filename = os.path.basename(
         output_file
     )
@@ -594,7 +790,8 @@ async def download(request: DownloadRequest):
 
         filename=filename,
 
-        media_type="application/octet-stream"
+        media_type=
+            "application/octet-stream"
 
     )
 
@@ -610,9 +807,11 @@ if __name__ == "__main__":
         )
     )
 
+
     print(
         "유튜브 통합 다운로드 서버가 시작되었습니다!"
     )
+
 
     uvicorn.run(
 

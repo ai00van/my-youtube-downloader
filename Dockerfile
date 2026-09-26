@@ -1,7 +1,12 @@
+```dockerfile
+# ============================================
+# Stage 1: Build bgutil PO Token Provider
+# ============================================
+
 FROM node:22-bookworm-slim AS bgutil-builder
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
         git \
         ca-certificates \
         build-essential \
@@ -16,7 +21,9 @@ RUN apt-get update \
 
 WORKDIR /tmp
 
-RUN git clone --depth 1 --branch 2.0.0 \
+RUN git clone \
+    --depth 1 \
+    --branch 2.0.0 \
     https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git \
     bgutil
 
@@ -27,13 +34,18 @@ RUN npm ci --no-audit --no-fund
 RUN npx tsc
 
 
+# ============================================
+# Stage 2: Runtime
+# ============================================
+
 FROM node:22-bookworm-slim
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+# Python / ffmpeg / bgutil runtime dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
         python3 \
         python3-pip \
         ffmpeg \
@@ -46,7 +58,17 @@ RUN apt-get update \
         librsvg2-2 \
     && rm -rf /var/lib/apt/lists/*
 
+
+# ============================================
+# Application directory
+# ============================================
+
 WORKDIR /app
+
+
+# ============================================
+# Copy bgutil
+# ============================================
 
 COPY --from=bgutil-builder \
     /tmp/bgutil/server/build \
@@ -56,6 +78,11 @@ COPY --from=bgutil-builder \
     /tmp/bgutil/server/node_modules \
     /opt/bgutil/node_modules
 
+
+# ============================================
+# Python dependencies
+# ============================================
+
 COPY requirements.txt /app/requirements.txt
 
 RUN python3 -m pip install \
@@ -63,12 +90,29 @@ RUN python3 -m pip install \
     --no-cache-dir \
     -r /app/requirements.txt
 
+
+# ============================================
+# Application files
+# ============================================
+
 COPY app.py /app/app.py
 COPY start.sh /app/start.sh
+
 RUN chmod +x /app/start.sh
 
 RUN mkdir -p /app/downloads
 
-EXPOSE 4416
+
+# ============================================
+# API port
+# ============================================
+
+EXPOSE 10000
+
+
+# ============================================
+# Start
+# ============================================
 
 CMD ["/app/start.sh"]
+```

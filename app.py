@@ -9,12 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import yt_dlp
 
-
 app = FastAPI(title="YouTube 통합 다운로드 서버")
 
 DOWNLOAD_DIR = "/app/downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -198,7 +196,6 @@ button:disabled {
 
 const NEWLINE = String.fromCharCode(10);
 
-
 function changeMode() {
 
     const selected =
@@ -241,7 +238,12 @@ async function downloadVideo() {
         document.getElementById("audioCodec");
 
 
-    if (!urlElement || !button || !status || !modeElement) {
+    if (
+        !urlElement ||
+        !button ||
+        !status ||
+        !modeElement
+    ) {
 
         console.error(
             "필수 HTML 요소를 찾을 수 없습니다."
@@ -366,7 +368,6 @@ async function downloadVideo() {
         const downloadUrl =
             window.URL.createObjectURL(blob);
 
-
         const a =
             document.createElement("a");
 
@@ -441,9 +442,11 @@ async function downloadVideo() {
 
         setTimeout(
             function() {
+
                 window.URL.revokeObjectURL(
                     downloadUrl
                 );
+
             },
             1000
         );
@@ -465,7 +468,8 @@ async function downloadVideo() {
             NEWLINE +
             NEWLINE +
             (
-                error && error.message
+                error &&
+                error.message
                     ? error.message
                     : String(error)
             );
@@ -486,7 +490,6 @@ document.addEventListener(
             document.getElementById(
                 "downloadButton"
             );
-
 
         const modeInputs =
             document.querySelectorAll(
@@ -535,6 +538,7 @@ document.addEventListener(
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
+
     return HTML_PAGE
 
 
@@ -616,8 +620,8 @@ async def download(request: DownloadRequest):
 
     elif request.mode == "audio":
 
-        codec =
-            request.audio_codec.lower()
+        codec = request.audio_codec.lower()
+
 
         codec_map = {
 
@@ -651,6 +655,7 @@ async def download(request: DownloadRequest):
             "postprocessors": [
 
                 {
+
                     "key":
                         "FFmpegExtractAudio",
 
@@ -659,6 +664,7 @@ async def download(request: DownloadRequest):
 
                     "preferredquality":
                         "320"
+
                 }
 
             ]

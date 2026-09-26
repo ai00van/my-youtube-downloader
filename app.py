@@ -34,10 +34,6 @@ async def home():
 async def update_server(request: Request):
     global LOCAL_SERVER
 
-    token = request.headers.get("X-Update-Token")
-    if token != UPDATE_TOKEN:
-        raise HTTPException(status_code=403, detail="Invalid token")
-
     body = await request.json()
     new_server = str(body.get("url", "")).strip().rstrip("/")
 

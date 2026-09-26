@@ -1,7 +1,17 @@
-FROM node:26-bookworm-slim AS bgutil-builder
+FROM node:22-bookworm-slim AS bgutil-builder
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates \
+    && apt-get install -y --no-install-recommends \
+        git \
+        ca-certificates \
+        build-essential \
+        pkg-config \
+        python3 \
+        libcairo2-dev \
+        libpango1.0-dev \
+        libjpeg-dev \
+        libgif-dev \
+        librsvg2-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /tmp
@@ -17,7 +27,7 @@ RUN npm ci --no-audit --no-fund
 RUN npx tsc
 
 
-FROM node:26-bookworm-slim
+FROM node:22-bookworm-slim
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -28,6 +38,12 @@ RUN apt-get update \
         python3-pip \
         ffmpeg \
         ca-certificates \
+        libcairo2 \
+        libpango-1.0-0 \
+        libpangocairo-1.0-0 \
+        libjpeg62-turbo \
+        libgif7 \
+        librsvg2-2 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

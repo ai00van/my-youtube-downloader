@@ -1,38 +1,72 @@
 #!/bin/sh
-set -e
+set -eu
 
-# 1) 쿠키: YTDLP_COOKIES 환경변수에 cookies.txt(Netscape 형식) 내용이 들어있으면
-#    파일로 기록한다. Render 등에서는 파일 업로드보다 환경변수가 다루기 쉽다.
-if [ -n "$YTDLP_COOKIES" ]; then
+echo "=== Starting application ==="
+
+# 1. YouTube cookies 생성
+if [ -n "${YTDLP_COOKIES:-}" ]; then
     printf '%s\n' "$YTDLP_COOKIES" > /app/cookies.txt
-    echo "[start.sh] YTDLP_COOKIES 환경변수로부터 /app/cookies.txt 생성 완료"
+    echo "[start.sh] cookies.txt 생성 완료"
 else
-    echo "[start.sh] YTDLP_COOKIES 미설정 - 쿠키 없이 진행 (LOGIN_REQUIRED 위험)"
+    echo "[start.sh] WARNING: YTDLP_COOKIES가 설정되지 않았습니다."
 fi
 
-# 2) bgutil PO Token provider를 백그라운드로 기동
-node /opt/bgutil/build/main.js --host 127.0.0.1 --port 4416 &
 
-# 3) bgutil이 실제로 리스닝을 시작할 때까지 최대 30초 대기.
-echo "[start.sh] bgutil(127.0.0.1:4416) 준비 대기 중..."
+# 2. bgutil PO Token provider 시작
+echo "[start.sh] bgutil 시작..."
+
+node /opt/bgutil/build/main.js \
+    --host 127.0.0.1 \
+    --port 4416 &
+
+BGUTIL_PID=$!
+
+
+# 3. bgutil 준비 대기
+echo "[start.sh] bgutil 준비 대기 중..."
+
 i=0
+
 while [ "$i" -lt 30 ]; do
-    if python3 -c "
-import socket, sys
+
+    # bgutil 프로세스가 죽었는지 확인
+    if ! kill -0 "$BGUTIL_PID" 2>/dev/null; then
+        echo "[start.sh] ERROR: bgutil 프로세스가 종료되었습니다."
+        exit 1
+    fi
+
+    # 4416 포트 확인
+    if python3 -c '
+import socket
 s = socket.socket()
 s.settimeout(1)
-sys.exit(0 if s.connect_ex(('127.0.0.1', 4416)) == 0 else 1)
-"; then
-        echo "[start.sh] bgutil 준비 완료 (${i}초 후)"
+
+try:
+    s.connect(("127.0.0.1", 4416))
+    s.close()
+    exit(0)
+except:
+    exit(1)
+'; then
+        echo "[start.sh] bgutil 준비 완료 (${i}초)"
         break
     fi
+
     i=$((i + 1))
     sleep 1
 done
 
-if [ "$i" -eq 30 ]; then
-    echo "[start.sh] 경고: 30초 내에 bgutil이 준비되지 않았습니다. 그대로 진행합니다."
+if [ "$i" -ge 30 ]; then
+    echo "[start.sh] ERROR: bgutil이 30초 안에 시작되지 않았습니다."
+    exit 1
 fi
 
-# 4) API 서버 기동
-exec python3 -m uvicorn app:app --host 0.0.0.0 --port "${PORT:-10000}"
+
+# 4. FastAPI 시작
+PORT="${PORT:-10000}"
+
+echo "[start.sh] API 서버 시작: port ${PORT}"
+
+exec python3 -m uvicorn app:app \
+    --host 0.0.0.0 \
+    --port "$PORT"

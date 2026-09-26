@@ -2,5 +2,5 @@
    uvicorn
    yt-dlp
    pydantic
-   bgutil-ytdlp-pot-provider
    yt-dlp-ejs
+   bgutil-ytdlp-pot-provider
